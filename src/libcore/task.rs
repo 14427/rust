@@ -87,9 +87,16 @@ enum Task {
     TaskHandle(task_id)
 }
 
+#[cfg(stage0)]
 impl Task : cmp::Eq {
     pure fn eq(&&other: Task) -> bool { *self == *other }
     pure fn ne(&&other: Task) -> bool { !self.eq(other) }
+}
+#[cfg(stage1)]
+#[cfg(stage2)]
+impl Task : cmp::Eq {
+    pure fn eq(other: &Task) -> bool { *self == *(*other) }
+    pure fn ne(other: &Task) -> bool { !self.eq(other) }
 }
 
 /**
@@ -108,6 +115,7 @@ enum TaskResult {
     Failure,
 }
 
+#[cfg(stage0)]
 impl TaskResult: Eq {
     pure fn eq(&&other: TaskResult) -> bool {
         match (self, other) {
@@ -117,6 +125,17 @@ impl TaskResult: Eq {
     }
     pure fn ne(&&other: TaskResult) -> bool { !self.eq(other) }
 }
+#[cfg(stage1)]
+#[cfg(stage2)]
+impl TaskResult : Eq {
+    pure fn eq(other: &TaskResult) -> bool {
+        match (self, (*other)) {
+            (Success, Success) | (Failure, Failure) => true,
+            (Success, _) | (Failure, _) => false
+        }
+    }
+    pure fn ne(other: &TaskResult) -> bool { !self.eq(other) }
+}
 
 /// A message type for notifying of task lifecycle events
 enum Notification {
@@ -124,6 +143,7 @@ enum Notification {
     Exit(Task, TaskResult)
 }
 
+#[cfg(stage0)]
 impl Notification : cmp::Eq {
     pure fn eq(&&other: Notification) -> bool {
         match self {
@@ -135,6 +155,20 @@ impl Notification : cmp::Eq {
         }
     }
     pure fn ne(&&other: Notification) -> bool { !self.eq(other) }
+}
+#[cfg(stage1)]
+#[cfg(stage2)]
+impl Notification : cmp::Eq {
+    pure fn eq(other: &Notification) -> bool {
+        match self {
+            Exit(e0a, e1a) => {
+                match (*other) {
+                    Exit(e0b, e1b) => e0a == e0b && e1a == e1b
+                }
+            }
+        }
+    }
+    pure fn ne(other: &Notification) -> bool { !self.eq(other) }
 }
 
 /// Scheduler modes
@@ -156,6 +190,7 @@ enum SchedMode {
     PlatformThread
 }
 
+#[cfg(stage0)]
 impl SchedMode : cmp::Eq {
     pure fn eq(&&other: SchedMode) -> bool {
         match self {
@@ -192,6 +227,47 @@ impl SchedMode : cmp::Eq {
         }
     }
     pure fn ne(&&other: SchedMode) -> bool {
+        !self.eq(other)
+    }
+}
+#[cfg(stage1)]
+#[cfg(stage2)]
+impl SchedMode : cmp::Eq {
+    pure fn eq(other: &SchedMode) -> bool {
+        match self {
+            SingleThreaded => {
+                match (*other) {
+                    SingleThreaded => true,
+                    _ => false
+                }
+            }
+            ThreadPerCore => {
+                match (*other) {
+                    ThreadPerCore => true,
+                    _ => false
+                }
+            }
+            ThreadPerTask => {
+                match (*other) {
+                    ThreadPerTask => true,
+                    _ => false
+                }
+            }
+            ManualThreads(e0a) => {
+                match (*other) {
+                    ManualThreads(e0b) => e0a == e0b,
+                    _ => false
+                }
+            }
+            PlatformThread => {
+                match (*other) {
+                    PlatformThread => true,
+                    _ => false
+                }
+            }
+        }
+    }
+    pure fn ne(other: &SchedMode) -> bool {
         !self.eq(other)
     }
 }
@@ -1462,6 +1538,7 @@ type LocalDataKey<T: Owned> = &fn(+@T);
 trait LocalData { }
 impl<T: Owned> @T: LocalData { }
 
+#[cfg(stage0)]
 impl LocalData: Eq {
     pure fn eq(&&other: LocalData) -> bool unsafe {
         let ptr_a: (uint, uint) = cast::reinterpret_cast(&self);
@@ -1469,6 +1546,16 @@ impl LocalData: Eq {
         return ptr_a == ptr_b;
     }
     pure fn ne(&&other: LocalData) -> bool { !self.eq(other) }
+}
+#[cfg(stage1)]
+#[cfg(stage2)]
+impl LocalData : Eq {
+    pure fn eq(other: &@LocalData) -> bool unsafe {
+        let ptr_a: (uint, uint) = unsafe::reinterpret_cast(&self);
+        let ptr_b: (uint, uint) = unsafe::reinterpret_cast(&(*other));
+        return ptr_a == ptr_b;
+    }
+    pure fn ne(other: &@LocalData) -> bool { !self.eq(other) }
 }
 
 // We use dvec because it's the best data structure in core. If TLS is used
